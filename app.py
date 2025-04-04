@@ -1,14 +1,12 @@
 import streamlit as st
 import pandas as pd
 from utils.spotify_api import create_spotify_client, get_recent_tracks
-from utils.spotify_api import get_audio_features
-import plotly.graph_objects as go
 
 st.set_page_config(page_title="MeloMix", layout="wide")
 st.title("🎧 MeloMix")
 st.subheader("Explora tu huella musical en Spotify")
 
-# Inicializamos el estado si no existe
+# Inicializamos el estado de sesión para mantener el cliente activo
 if "sp" not in st.session_state:
     sp, auth_url = create_spotify_client()
     if sp:
@@ -20,58 +18,31 @@ if "sp" not in st.session_state:
 sp = st.session_state.get("sp", None)
 auth_url = st.session_state.get("auth_url", None)
 
-# UI según estado de sesión
+# Interfaz: login o datos
 if auth_url:
     st.warning("Para continuar, inicia sesión con Spotify:")
     st.markdown(f"[🔐 Iniciar sesión en Spotify]({auth_url})")
 elif sp:
     st.success("✅ Autenticado correctamente")
-    st.write("🎵 Aquí va tu resumen musical reciente...")
+    st.write("🎵 Tus 50 canciones reproducidas más recientes:")
 
     tracks = get_recent_tracks(sp)
     df = pd.DataFrame(tracks)
 
-    # Mostrar tabla
-    st.dataframe(df.head())
+    # Tabla de canciones
+    st.dataframe(df[["played_at", "track_name", "artist", "album", "release_date"]].head(50))
 
-    # Obtener audio features
-    track_ids = df["track_id"].dropna().tolist()
-    features = get_audio_features(sp, track_ids)
-
-    # Convertir a DataFrame
-    features_df = pd.DataFrame(features)
-
-    # Seleccionar features interesantes y promediarlas
-    cols = ["danceability", "energy", "valence", "acousticness", "instrumentalness", "speechiness"]
-    promedios = features_df[cols].mean().round(2)
-
-    # Crear Radar Chart
-    fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=promedios.values,
-        theta=promedios.index,
-        fill="toself",
-        name="Promedio de audio features"
-    ))
-    fig.update_layout(
-        polar=dict(
-            radialaxis=dict(visible=True, range=[0,1])
-        ),
-        showlegend=False,
-        title="🎚️ Perfil sonoro promedio (últimas 50 canciones)"
-    )
-
-    st.plotly_chart(fig)
-
-    # Métricas rápidas
+    # Métricas clave
+    st.markdown("### 📊 Métricas rápidas")
     st.metric("🎵 Canciones", len(df))
     st.metric("🎤 Artistas únicos", df["artist"].nunique())
 
-    # Gráfico de canciones por hora
-    df["played_at"] = pd.to_datetime(df["played_at"])
+    # Histograma de horas de reproducción
+    df["played_at"] = pd.to_datetime(df["played_at"]).dt.tz_convert("America/Bogota")
     df["hora"] = df["played_at"].dt.hour
     hist = df["hora"].value_counts().sort_index()
 
+    st.markdown("### ⏰ Horas en que escuchaste música")
     st.bar_chart(hist)
 else:
     st.error("❌ Ocurrió un error durante la autenticación.")
